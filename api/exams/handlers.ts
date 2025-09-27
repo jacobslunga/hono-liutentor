@@ -1,0 +1,129 @@
+import type { Context } from "hono";
+import { HTTPException } from "hono/http-exception";
+import type { StatRow } from "@/types";
+import supabase from "@/db/supabase";
+
+type SolutionRow = {
+  exam_id: number;
+};
+
+/**
+ * Fetches all exams for a given course code
+ * @param courseCode
+ */
+const getCourseExams = async (c: Context) => {
+  const { courseCode } = c.req.param();
+
+  if (!courseCode) {
+    throw new HTTPException(404, { message: "Ingen kurskod angiven" });
+  }
+
+  const { data: examsData, error: examsError } = await supabase
+    .from("exams")
+    .select("id, course_code, exam_date, pdf_url, exam_name")
+    .eq("course_code", courseCode)
+    .order("exam_date", { ascending: false });
+
+  if (examsError) {
+    throw new HTTPException(500, { message: examsError.message });
+  }
+  if (!examsData || examsData.length === 0) {
+    throw new HTTPException(404, {
+      message: "No exam documents found for this course",
+    });
+  }
+
+  const { data: statsResponse, error: statsError } = await supabase
+    .from("exam_stats")
+    .select(
+      "exam_date, statistics, pass_rate, course_name_swe, course_name_eng"
+    )
+    .eq("course_code", courseCode);
+
+  if (statsError) {
+    throw new HTTPException(500, { message: statsError.message });
+  }
+
+  const statsMap = new Map<
+    string,
+    { statistics: unknown; pass_rate: number | null }
+  >();
+  for (const s of (statsResponse ?? []) as StatRow[]) {
+    statsMap.set(s.exam_date, {
+      statistics: s.statistics,
+      pass_rate: s.pass_rate ?? null,
+    });
+  }
+
+  const examIds = examsData.map((e) => e.id);
+  const { data: solutions, error: solError } = await supabase
+    .from("solutions")
+    .select("exam_id")
+    .in("exam_id", examIds);
+
+  if (solError) {
+    throw new HTTPException(500, { message: solError.message });
+  }
+
+  const solved = new Set<number>(
+    (solutions ?? []).map((r: SolutionRow) => r.exam_id)
+  );
+
+  const exam_list = examsData.map((exam) => {
+    const m = statsMap.get(exam.exam_date);
+    return {
+      id: exam.id,
+      course_code: exam.course_code,
+      exam_date: exam.exam_date,
+      pdf_url: exam.pdf_url,
+      exam_name: exam.exam_name,
+      has_solution: solved.has(exam.id),
+      statistics: m?.statistics,
+      pass_rate: m?.pass_rate,
+    };
+  });
+
+  const course_name_swe =
+    (statsResponse &&
+      statsResponse[0] &&
+      (statsResponse[0] as StatRow).course_name_swe) ||
+    "";
+  const course_name_eng =
+    (statsResponse &&
+      statsResponse[0] &&
+      (statsResponse[0] as StatRow).course_name_eng) ||
+    "";
+
+  return c.json({
+    course_code: courseCode,
+    course_name_swe,
+    course_name_eng,
+    exams: exam_list,
+  });
+};
+
+/**
+ * Fetches an exam given it's id with it's corresponding solutions
+ * @param examId
+ */
+const getExamWithSolutions = async (c: Context) => {
+  const { examId } = c.req.param();
+
+  if (!examId) {
+    throw new HTTPException(404, { message: "Inget tenta ID angivet" });
+  }
+
+  const { data: examData, error } = await supabase
+    .from("exams")
+    .select("id, course_code, pdf_url, exam_date, exam_name, solutions(*)")
+    .eq("id", examId)
+    .single();
+
+  if (error) {
+    throw new HTTPException(500, { message: error.message });
+  }
+
+  return c.json(examData);
+};
+
+export { getCourseExams, getExamWithSolutions };
