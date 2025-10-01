@@ -4,14 +4,20 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.6"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.1.0-beta.7",
     "@supabase/supabase-js": "^2.58.0",
+    "ai": "^5.1.0-beta.14",
+    "dotenv": "^17.2.2",
     "hono": "^4.9.9",
-    "hono-rate-limiter": "^0.4.2"
+    "hono-rate-limiter": "^0.4.2",
+    "zod": "^4.1.11"
   }
 }

@@ -1,6 +1,9 @@
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { StatRow } from "@/types";
+import { openai } from "@ai-sdk/openai";
+import { stream } from "hono/streaming";
+import { streamText, type ModelMessage } from "ai";
 import supabase from "@/db/supabase";
 
 type SolutionRow = {
@@ -126,4 +129,63 @@ const getExamWithSolutions = async (c: Context) => {
   return c.json(examData);
 };
 
-export { getCourseExams, getExamWithSolutions };
+/**
+ * Streams back response for a given exam
+ * @param examId
+ */
+const generateAIResponse = async (c: Context) => {
+  const { examId } = c.req.param();
+
+  if (!examId) {
+    throw new HTTPException(404, {
+      message: `Hitta ingen tenta med ID: ${examId}`,
+    });
+  }
+
+  const { data: exam, error } = await supabase
+    .from("exams")
+    .select("id, pdf_url")
+    .eq("id", examId)
+    .single();
+
+  if (error || !exam) {
+    throw new HTTPException(404, {
+      message: `Kunde inte hitta tenta med ID: ${examId}`,
+    });
+  }
+
+  const body = await c.req.json<{ messages: ModelMessage[] }>();
+
+  const recentMessages = body.messages.slice(-10);
+
+  const messages: ModelMessage[] = [
+    ...recentMessages,
+    {
+      role: "user",
+      content: [
+        {
+          type: "file",
+          data: new URL(exam.pdf_url),
+          mediaType: "application/pdf",
+        },
+      ],
+    },
+  ];
+
+  const result = streamText({
+    model: openai("gpt-4.1-nano"),
+    messages,
+  });
+
+  return stream(c, async (s) => {
+    s.onAbort(() => {
+      console.log("Client aborted");
+    });
+
+    for await (const delta of result.textStream) {
+      await s.write(delta);
+    }
+  });
+};
+
+export { getCourseExams, getExamWithSolutions, generateAIResponse };

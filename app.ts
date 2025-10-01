@@ -17,6 +17,6 @@ const limiter = rateLimiter({
 
 app.use(logger());
 app.use(limiter);
-app.route("/api", exams);
+app.route("/", exams);
 
 export default app;
