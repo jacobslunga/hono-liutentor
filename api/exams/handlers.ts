@@ -10,6 +10,31 @@ type SolutionRow = {
   exam_id: number;
 };
 
+type SolutionPdfRow = {
+  pdf_url: string;
+};
+
+const SYSTEM_PROMPT_WITH_SOLUTION = `Du är en hjälpsam studiementor för universitets studenter. Din uppgift är att hjälpa studenter att förstå tentafrågor och koncept genom att:
+
+1. **Förklara koncept tydligt**: Ge klara, pedagogiska förklaringar av de koncept som tentafrågorna testar.
+2. **Koppla till lösningen**: Du har tillgång till både tentan OCH lösningsförslagen. Referera alltid till lösningen när du förklarar hur man ska lösa en uppgift.
+3. **Visa steg-för-steg**: Dela upp lösningar i logiska steg som är lätta att följa.
+4. **Förklara varför**: Inte bara visa vad man ska göra, utan förklara VARFÖR varje steg är nödvändigt.
+5. **Var pedagogisk**: Anpassa dina förklaringar efter studentens förståelsenivå.
+
+Svara alltid på svenska. Var tålmodig och uppmuntrande. Om studenten har fel, förklara varför på ett konstruktivt sätt.`;
+
+const SYSTEM_PROMPT_WITHOUT_SOLUTION = `Du är en hjälpsam studiementor för universitets studenter. Din uppgift är att hjälpa studenter att förstå tentafrågor och koncept genom att:
+
+1. **Förklara koncept tydligt**: Ge klara, pedagogiska förklaringar av de koncept som tentafrågorna testar.
+2. **Visa steg-för-steg**: Dela upp lösningar i logiska steg som är lätta att följa.
+3. **Förklara varför**: Inte bara visa vad man ska göra, utan förklara VARFÖR varje steg är nödvändigt.
+4. **Var pedagogisk**: Anpassa dina förklaringar efter studentens förståelsenivå.
+
+OBS: Det finns ingen lösning tillgänglig för denna tenta, så du måste själv räkna ut lösningar baserat på dina kunskaper.
+
+Svara alltid på svenska. Var tålmodig och uppmuntrande.`;
+
 /**
  * Fetches all exams for a given course code
  * @param courseCode
@@ -154,23 +179,48 @@ const generateAIResponse = async (c: Context) => {
     });
   }
 
+  const { data: solutions } = await supabase
+    .from("solutions")
+    .select("pdf_url")
+    .eq("exam_id", examId)
+    .limit(1);
+
+  const solution: SolutionPdfRow | null = solutions?.[0] ?? null;
+
   const body = await c.req.json<{ messages: ModelMessage[] }>();
 
   const recentMessages = body.messages.slice(-10);
 
-  const messages: ModelMessage[] = [
-    ...recentMessages,
-    {
-      role: "user",
-      content: [
-        {
-          type: "file",
-          data: new URL(exam.pdf_url),
-          mediaType: "application/pdf",
-        },
-      ],
-    },
-  ];
+  const systemPrompt = solution
+    ? SYSTEM_PROMPT_WITH_SOLUTION
+    : SYSTEM_PROMPT_WITHOUT_SOLUTION;
+
+  const messages: ModelMessage[] =
+    body.messages.length <= 1
+      ? [
+          { role: "system", content: systemPrompt },
+          ...recentMessages,
+          {
+            role: "user",
+            content: [
+              {
+                type: "file",
+                data: new URL(exam.pdf_url),
+                mediaType: "application/pdf",
+              },
+              ...(solution
+                ? [
+                    {
+                      type: "file" as const,
+                      data: new URL(solution.pdf_url),
+                      mediaType: "application/pdf" as const,
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : [{ role: "system", content: systemPrompt }, ...recentMessages];
 
   const result = streamText({
     model: openai("gpt-4.1-nano"),
