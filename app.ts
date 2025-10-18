@@ -2,8 +2,16 @@ import { Hono } from "hono";
 import exams from "@/api/exams/routes";
 import { logger } from "hono/logger";
 import { rateLimiter } from "hono-rate-limiter";
+import { cors } from "hono/cors";
 
 const app = new Hono();
+
+app.use(
+  "/*",
+  cors({
+    origin: ["http://localhost:5173", "https://liutentor.se"],
+  })
+);
 
 const limiter = rateLimiter({
   windowMs: 60 * 1000,
