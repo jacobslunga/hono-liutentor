@@ -1,8 +1,4 @@
-import {
-  generateAIResponse,
-  getCourseExams,
-  getExamWithSolutions,
-} from "@/api/exams/handlers";
+import { generateAIResponse } from "@/api/exams/handlers";
 import {
   chatMessageSchema,
   courseCodeSchema,
@@ -15,18 +11,6 @@ import { bodySizeLimit, requestTimeout } from "@/middleware/security";
 import { Hono } from "hono";
 
 const exams = new Hono().basePath("/exams");
-
-exams.get(
-  "/:courseCode",
-  zValidator("param", courseCodeSchema),
-  getCourseExams
-);
-
-exams.get(
-  "/exam/:examId",
-  zValidator("param", examIdSchema),
-  getExamWithSolutions
-);
 
 exams.post(
   "/exam/:examId/chat",
