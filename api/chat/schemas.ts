@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Schema for AI chat messages
+ * Schema for chat messages
  */
 export const chatMessageSchema = z.object({
   messages: z
@@ -27,18 +27,14 @@ export const chatMessageSchema = z.object({
       })
     )
     .min(1, "At least one message is required")
-    .max(50, "Too many messages in conversation"),
-});
-
-/**
- * Schema for course code parameter
- */
-export const courseCodeSchema = z.object({
-  courseCode: z
-    .string()
-    .min(1, "Course code is required")
-    .max(6, "Course code too long")
-    .regex(/^[A-Z0-9]+$/i, "Invalid course code format"),
+    .max(100, "Too many messages in conversation"),
+  giveDirectAnswer: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe(
+      "Whether to give direct answers or challenge the student to think"
+    ),
 });
 
 /**

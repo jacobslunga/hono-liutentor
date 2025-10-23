@@ -1,6 +1,5 @@
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { StatRow } from "@/types";
 import { openai } from "@ai-sdk/openai";
 import { stream } from "hono/streaming";
 import { streamText, type ModelMessage } from "ai";
@@ -10,9 +9,39 @@ type SolutionPdfRow = {
   pdf_url: string;
 };
 
-const SYSTEM_PROMPT_WITH_SOLUTION = `Du är en studiementor som hjälper studenter förstå tentafrågor. Du har tillgång till både tentan och lösningen. Förklara steg-för-steg och referera till lösningen. Svara på svenska.`;
+const MATH_FORMATTING_INSTRUCTIONS = `
+VIKTIGT - Matematisk formattering:
+- Använd ALLTID LaTeX-syntax för ALL matematik
+- För inline-matematik: använd $...$, exempel: $x^2 + y^2 = z^2$
+- För block-matematik: använd $$...$$, exempel:
+$$
+f(x) = \\int_{a}^{b} x^2 dx
+$$
+- Använd ALDRIG \\[...\\] eller \\(...\\) syntax
+- Alla formler, ekvationer, variabler och matematiska uttryck måste vara i LaTeX
+- Exempel på korrekt formatering:
+  * "Lös ekvationen $ax^2 + bx + c = 0$ med hjälp av formeln:"
+  * "$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$"`;
 
-const SYSTEM_PROMPT_WITHOUT_SOLUTION = `Du är en studiementor som hjälper studenter förstå tentafrågor. Det finns ingen lösning tillgänglig. Förklara steg-för-steg baserat på dina kunskaper. Svara på svenska.`;
+/**
+ * Generates system prompt based on available resources and teaching mode
+ */
+const getSystemPrompt = (
+  hasSolution: boolean,
+  giveDirectAnswer: boolean
+): string => {
+  const baseRole =
+    "Du är en studiementor som hjälper studenter förstå tentafrågor.";
+  const solutionAccess = hasSolution
+    ? "Du har tillgång till både tentan och lösningen."
+    : "Det finns ingen lösning tillgänglig.";
+
+  const teachingStyle = giveDirectAnswer
+    ? "Ge tydliga, direkta svar och förklaringar. Förklara steg-för-steg och visa den fullständiga lösningen. Om lösning finns, referera till den."
+    : "Utmana studenten att tänka själv. Ställ ledande frågor, ge tips och vägledning, men ge INTE det direkta svaret. Guida studenten att komma fram till lösningen på egen hand genom att ge hints och förklaringar av relevanta koncept.";
+
+  return `${baseRole} ${solutionAccess} ${teachingStyle} Svara på svenska.${MATH_FORMATTING_INSTRUCTIONS}`;
+};
 
 /**
  * Streams back response for a given exam
@@ -47,13 +76,15 @@ const generateAIResponse = async (c: Context) => {
 
   const solution: SolutionPdfRow | null = solutions?.[0] ?? null;
 
-  const body = await c.req.json<{ messages: ModelMessage[] }>();
+  const body = await c.req.json<{
+    messages: ModelMessage[];
+    giveDirectAnswer?: boolean;
+  }>();
 
   const recentMessages = body.messages.slice(-10);
+  const giveDirectAnswer = body.giveDirectAnswer ?? true;
 
-  const systemPrompt = solution
-    ? SYSTEM_PROMPT_WITH_SOLUTION
-    : SYSTEM_PROMPT_WITHOUT_SOLUTION;
+  const systemPrompt = getSystemPrompt(!!solution, giveDirectAnswer);
 
   const messages: ModelMessage[] = [
     {

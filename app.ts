@@ -1,8 +1,7 @@
 import { Hono } from "hono";
-import exams from "@/api/exams/routes";
+import chat from "@/api/chat/routes";
 import health from "@/api/health/routes";
 import { logger } from "hono/logger";
-import { generalLimiter } from "@/middleware/rate-limiters";
 import { securityHeaders } from "@/middleware/security";
 import { cors } from "hono/cors";
 
@@ -21,19 +20,22 @@ app.use(
   })
 );
 
+// Security headers
 app.use("/*", securityHeaders);
 
+// Logger
 app.use(logger());
 
-app.use(generalLimiter);
-
+// Routes
 app.route("/", health);
-app.route("/", exams);
+app.route("/", chat);
 
+// 404 handler
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);
 });
 
+// Global error handler
 app.onError((err, c) => {
   console.error(`Error: ${err.message}`, err);
 
