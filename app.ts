@@ -5,12 +5,10 @@ import { logger } from "hono/logger";
 import { generalLimiter } from "@/middleware/rate-limiters";
 import { securityHeaders } from "@/middleware/security";
 import { cors } from "hono/cors";
-import { compress } from "hono/compress";
 
 const app = new Hono();
 
-app.use("/*", compress());
-
+// CORS configuration
 app.use(
   "/*",
   cors({
