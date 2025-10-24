@@ -4,6 +4,7 @@ import { openai } from "@ai-sdk/openai";
 import { stream } from "hono/streaming";
 import { streamText, type ModelMessage } from "ai";
 import supabase from "@/db/supabase";
+import { downloadAndCompressPdf } from "@/utils/pdf-compression";
 
 type SolutionPdfRow = {
   pdf_url: string;
@@ -86,20 +87,30 @@ const generateAIResponse = async (c: Context) => {
 
   const systemPrompt = getSystemPrompt(!!solution, giveDirectAnswer);
 
+  // Download and compress PDFs
+  console.log("Downloading and compressing exam PDF...");
+  const compressedExamPdf = await downloadAndCompressPdf(exam.pdf_url);
+
+  let compressedSolutionPdf: string | null = null;
+  if (solution) {
+    console.log("Downloading and compressing solution PDF...");
+    compressedSolutionPdf = await downloadAndCompressPdf(solution.pdf_url);
+  }
+
   const messages: ModelMessage[] = [
     {
       role: "user",
       content: [
         {
           type: "file",
-          data: new URL(exam.pdf_url),
+          data: compressedExamPdf,
           mediaType: "application/pdf",
         },
-        ...(solution
+        ...(compressedSolutionPdf
           ? [
               {
                 type: "file" as const,
-                data: new URL(solution.pdf_url),
+                data: compressedSolutionPdf,
                 mediaType: "application/pdf" as const,
               },
             ]
