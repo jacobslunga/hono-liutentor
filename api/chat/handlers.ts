@@ -87,13 +87,10 @@ const generateAIResponse = async (c: Context) => {
 
   const systemPrompt = getSystemPrompt(!!solution, giveDirectAnswer);
 
-  // Download and compress PDFs
-  console.log("Downloading and compressing exam PDF...");
   const compressedExamPdf = await downloadAndCompressPdf(exam.pdf_url);
 
   let compressedSolutionPdf: string | null = null;
   if (solution) {
-    console.log("Downloading and compressing solution PDF...");
     compressedSolutionPdf = await downloadAndCompressPdf(solution.pdf_url);
   }
 
